@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/libdns/libdns"
-	designate "github.com/libdns/openstack-designate"
+	designate "github.com/binerogroup/openstack-designate"
 	"log"
 	"os"
 	"time"
@@ -12,23 +12,14 @@ import (
 
 func main() {
 	// specify proper ZONE name.
-	// example: bar.example.com.
+	// example: bar.example.com
 	zone := os.Getenv("ZONE")
 	if zone == "" {
 		fmt.Printf("ZONE not set\n")
 		return
 	}
 
-	provider := designate.Provider{AuthOpenStack: designate.AuthOpenStack{
-		RegionName:         "foo",
-		TenantID:           "123123123",
-		IdentityApiVersion: "2",
-		Password:           "foo-bar-password",
-		AuthURL:            "https://keystone.example.com/v2.0",
-		Username:           "foo-username",
-		TenantName:         "foo-tenant-name",
-		EndpointType:       "publicURL",
-	}}
+	provider := designate.Provider{}
 
 	// GET records
 	records, err := provider.GetRecords(context.TODO(), zone)
@@ -42,7 +33,7 @@ func main() {
 	add, err := provider.AppendRecords(context.TODO(), zone, []libdns.Record{libdns.Record{
 		Type:  "TXT",
 		Name:  testName + zone,
-		Value: fmt.Sprintf("Replacement test entry created by libdns %s", time.Now()),
+		Value: fmt.Sprintf("\"Replacement test entry created by libdns %s\"", time.Now()),
 		TTL:   time.Duration(600) * time.Second,
 	}})
 
@@ -56,7 +47,7 @@ func main() {
 	edit, err := provider.SetRecords(context.TODO(), zone, []libdns.Record{libdns.Record{
 		Type:  "TXT",
 		Name:  testName + zone,
-		Value: fmt.Sprintf("SET1 test entry created by libdns %s", time.Now()),
+		Value: fmt.Sprintf("\"SET1 test entry created by libdns %s\"", time.Now()),
 		TTL:   time.Duration(600) * time.Second,
 	}})
 	if err != nil {

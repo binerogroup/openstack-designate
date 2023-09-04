@@ -3,6 +3,8 @@ package designate
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/dns/v2/recordsets"
@@ -27,7 +29,15 @@ func (p *Provider) getRecords(recordSets []recordsets.RecordSet) ([]libdns.Recor
 }
 
 func (p *Provider) getRecordID(recordName string, zone string) (string, error) {
-	recordName = recordName + "."
+	if zone[len(zone)-1:] != "." {
+		zone = zone + "."
+	}
+	if recordName[len(recordName)-1:] != "." {
+		recordName = recordName + "."
+	}
+	if !strings.HasSuffix(recordName, zone) {
+		recordName = recordName + zone
+	}
 
 	listOpts := recordsets.ListOpts{
 		Type: "TXT",
@@ -53,12 +63,24 @@ func (p *Provider) getRecordID(recordName string, zone string) (string, error) {
 }
 
 func (p *Provider) createRecord(record libdns.Record, zone string) error {
+	if zone[len(zone)-1:] != "." {
+		zone = zone + "."
+	}
+	if record.Name[len(record.Name)-1:] != "." {
+		record.Name = record.Name + "."
+	}
+	if !strings.HasSuffix(record.Name, zone) {
+		record.Name = record.Name + zone
+	}
+
 	createOpts := recordsets.CreateOpts{
-		Name:    record.Name + ".",
+		Name:    record.Name,
 		Type:    record.Type,
 		TTL:     int(record.TTL / time.Second),
 		Records: []string{record.Value},
 	}
+
+	fmt.Fprintf(os.Stderr, "CREATERECORD: %v %v\n", record.Name, zone)
 
 	exist, err := p.getRecordID(record.Name, zone)
 	if err != nil {
@@ -71,7 +93,7 @@ func (p *Provider) createRecord(record libdns.Record, zone string) error {
 
 	_, err = recordsets.Create(p.dnsClient, p.zoneID, createOpts).Extract()
 	if err != nil {
-		return fmt.Errorf("cannot create DNS record: %v", err)
+		return fmt.Errorf("cannot create DNS record '%v' in zone '%v'): %v", record.Name, zone, err)
 	}
 
 	return nil
@@ -124,11 +146,22 @@ func (p *Provider) auth() error {
 		return nil
 	}
 
-	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: p.AuthOpenStack.AuthURL,
-		Username:         p.AuthOpenStack.Username,
-		Password:         p.AuthOpenStack.Password,
-		TenantID:         p.AuthOpenStack.TenantID,
+	var regionName string
+	var opts gophercloud.AuthOptions
+	if p.AuthOpenStack == (AuthOpenStack{}) {
+		opts, err = openstack.AuthOptionsFromEnv()
+		regionName = os.Getenv("OS_REGION_NAME")
+		if err != nil {
+			return err
+		}
+	} else {
+		opts = gophercloud.AuthOptions{
+			IdentityEndpoint: p.AuthOpenStack.AuthURL,
+			Username:         p.AuthOpenStack.Username,
+			Password:         p.AuthOpenStack.Password,
+			TenantID:         p.AuthOpenStack.TenantID,
+		}
+		regionName = p.AuthOpenStack.RegionName
 	}
 
 	provider, err := openstack.AuthenticatedClient(opts)
@@ -137,7 +170,7 @@ func (p *Provider) auth() error {
 	}
 
 	dnsClient, err := openstack.NewDNSV2(provider, gophercloud.EndpointOpts{
-		Region: p.AuthOpenStack.RegionName,
+		Region: regionName,
 	})
 	if err != nil {
 		return err
@@ -148,8 +181,7 @@ func (p *Provider) auth() error {
 }
 
 func (p *Provider) setZone(zone string) error {
-	dot := zone[len(zone)-1:]
-	if dot != "." {
+	if zone[len(zone)-1:] != "." {
 		zone = zone + "."
 	}
 
