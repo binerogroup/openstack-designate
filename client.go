@@ -80,8 +80,6 @@ func (p *Provider) createRecord(record libdns.Record, zone string) error {
 		Records: []string{record.Value},
 	}
 
-	fmt.Fprintf(os.Stderr, "CREATERECORD: %v %v\n", record.Name, zone)
-
 	exist, err := p.getRecordID(record.Name, zone)
 	if err != nil {
 		return fmt.Errorf("cannot get recordID: %v", err)
